@@ -150,14 +150,14 @@ void DecodeAndExecute(chip8* cpu)
 
         case OPCODE_SET_REG:
             printf("Setting register...\n");
-            cpu->V[(cpu->opcode & 0x0F00) >> 8] = cpu->opcode & 0x00FF; // Bitshift to get value between 0 and F
-            printf("Register: %x, Value: %d\n", (cpu->opcode & 0x0F00) >> 8, cpu->opcode & 0x00FF);
+            cpu->V[(cpu->opcode & 0x0F00) >> 8] = (cpu->opcode & 0x00FF); // Bitshift to get value between 0 and F
+            printf("Register: %x, Value: %x\n", (cpu->opcode & 0x0F00) >> 8, cpu->opcode & 0x00FF);
             break;
 
         case OPCODE_ADD_TO_REG:
             printf("Adding...\n");
-            cpu->V[(cpu->opcode & 0x0F00) >> 8] += cpu->opcode & 0x00FF;
-            printf("Index: %x, Modifier: %d\n", (cpu->opcode & 0x0F00) >> 8, cpu->opcode & 0x00FF);
+            cpu->V[(cpu->opcode & 0x0F00) >> 8] += (cpu->opcode & 0x00FF);
+            printf("Index: %x, Modifier: %x\n", (cpu->opcode & 0x0F00) >> 8, cpu->opcode & 0x00FF);
             break;
 
         case OPCODE_SET_INDEX_REG:
@@ -170,19 +170,20 @@ void DecodeAndExecute(chip8* cpu)
             // THIS ONE IS STILL BROKEN :(
             cpu->VF = 0;
             printf("Displaying...\n");
-            uint8_t x = ((cpu->opcode & 0x0F00) >> 8) % SCREEN_WIDTH;
-            uint8_t y = ((cpu->opcode & 0x00F0) >> 4) % SCREEN_HEIGHT;
+            uint8_t x = cpu->V[(cpu->opcode & 0x0F00) >> 8] % SCREEN_WIDTH;
+            uint8_t y = cpu->V[(cpu->opcode & 0x00F0) >> 4] % SCREEN_HEIGHT;
             uint8_t height = cpu->opcode & 0x000F;
             printf("Drawing at x: %d, y: %d. With a height of %d\n", x, y, height);
 
             for (int j=0; j<height; j++)
             {
-                if (y<0 || y>=SCREEN_HEIGHT) break;
+                if (y+j>=SCREEN_HEIGHT) break;
                 uint8_t spriteRow = cpu->memory[cpu->I+j];
                 for (int i=0; i<8; i++)
                 {
-                    if (x+i<0 || x+i>=SCREEN_WIDTH) break;
-                    cpu->display[x+i][y+j] = ((spriteRow >> (i-x)) & 0x000F);
+                    if (x+i>=SCREEN_WIDTH) break;
+                    if (cpu->display[x+i][y+j]) cpu->VF = 1;
+                    if ((spriteRow >> (i)) & 0x000F) cpu->display[x+i][y+j] = !cpu->display[x+i][y+j];
                 }
             }
             
