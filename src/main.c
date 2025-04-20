@@ -135,18 +135,23 @@ void DecodeAndExecute(chip8* cpu)
             switch (cpu->opcode)
             {
                 case OPCODE_CLEAR_SCREEN:
+                {
                     // We clear the screen this way because it is a 2D array
                     printf("Clearing..\n");
                     for (int x=0; x<SCREEN_WIDTH; x++) { memset(cpu->display[x], 0, SCREEN_HEIGHT); }
                     break;
+                }
+                break;
             }
             break;
 
         case OPCODE_JUMP:
+        {    
             printf("Jumping...\n");
             cpu->pc = cpu->opcode & 0x0FFF; // Jump to target
             printf("Address: %x\n", cpu->opcode & 0x0FFF);
-            break;
+        }
+        break;
 
         case OPCODE_SET_REG:
             printf("Setting register...\n");
@@ -179,11 +184,12 @@ void DecodeAndExecute(chip8* cpu)
             {
                 if (y+j>=SCREEN_HEIGHT) break;
                 uint8_t spriteRow = cpu->memory[cpu->I+j];
+                if (j % 2 == 0) printf("%08b\n", spriteRow);
                 for (int i=0; i<8; i++)
                 {
                     if (x+i>=SCREEN_WIDTH) break;
                     if (cpu->display[x+i][y+j]) cpu->VF = 1;
-                    if ((spriteRow >> (i)) & 0x000F) cpu->display[x+i][y+j] = !cpu->display[x+i][y+j];
+                    if ((spriteRow << i) & 0b10000000) cpu->display[x+i][y+j] = !cpu->display[x+i][y+j];
                 }
             }
             
@@ -191,14 +197,25 @@ void DecodeAndExecute(chip8* cpu)
     }
 }
 
+#include <unistd.h>
+
 void EmulateCycle(chip8* cpu)
 {
+    if (cpu->delayTimer>0) cpu->delayTimer--;
+    if (cpu->soundTimer>0)
+    {
+        printf("BEEP!\n");
+        cpu->delayTimer--;
+    }
+
     // Fetch instruction
     cpu->opcode = cpu->memory[cpu->pc] << 8 | cpu->memory[cpu->pc+1]; // Combine the two bytes to create the opcode
     printf("[0x%08x]: %04x\n", cpu->pc, cpu->opcode);
     cpu->pc+=2; // increment program counter by 2
 
     DecodeAndExecute(cpu);
+
+    //sleep(1);
 }
 
 int main( int argc, char* args[] )
