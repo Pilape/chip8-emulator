@@ -146,6 +146,14 @@ chip8 InitProgram(char* path)
     #define OPCODE_ADD 0x4 // VX is set to VX + VY
     #define OPCODE_SUBTRACT_XY 0x5 // VX is set to VX - VY
     #define OPCODE_SUBTRACT_YX 0x7 // VX is set to VY - VX
+    #define OPCODE_SHIFT_RIGHT 0x6 // Sets VX to VY and shifts VX to the right (We are using the COSMAC VIP implementation for now)
+    #define OPCODE_SHIFT_LEFT 0xE // Like OPCODE_SHIFT_RIGHT but we shift left
+    
+#define OPCODE_X(opcode) ((opcode & 0x0F00) >> 8)
+#define OPCODE_Y(opcode) ((opcode & 0x00F0) >> 4)
+#define OPCODE_NNN(opcode) (opcode & 0x0FFF)
+#define OPCODE_NN(opcode) (opcode & 0x00FF)
+#define OPCODE_N(opcode) (opcode & 0x000F)
 
 // We do both at the same time because it is simpler, atleast for the CHIP-8
 void DecodeAndExecute(chip8* cpu)
@@ -159,8 +167,7 @@ void DecodeAndExecute(chip8* cpu)
                 {
                     // We clear the screen this way because it is a 2D array
                     for (int x=0; x<SCREEN_WIDTH; x++) { memset(cpu->display[x], 0, SCREEN_HEIGHT); }
-                }
-                    break;
+                } break;
 
                 case OPCODE_RETURN_SUBROUTINE:
                 {
@@ -171,26 +178,68 @@ void DecodeAndExecute(chip8* cpu)
                     }
                     cpu->sp--;
                     cpu->pc = cpu->stack[cpu->sp];
-                }
-                    break;
+                } break;
 
                 default:
                 {
                     printf("[ERROR]: Invalid opcode: '%04x'\n", cpu->opcode);
                     cpu->halted = 1;
-                }
-                    break;
-            }
-            break;
+                } break;
+            } break;
 
-        /*case OPCODE_ARITHMETIC:
+        case OPCODE_ARITHMETIC:
         {
+            switch (OPCODE_N(cpu->opcode))
+            {
+                case OPCODE_SET:
+                { cpu->V[OPCODE_X(cpu->opcode)] = cpu->V[OPCODE_Y(cpu->opcode)]; } break;
 
-        }
-            break;*/
+                case OPCODE_BINARY_OR:
+                { cpu->V[OPCODE_X(cpu->opcode)] |= cpu->V[OPCODE_Y(cpu->opcode)]; } break;
+
+                case OPCODE_BINARY_AND:
+                { cpu->V[OPCODE_X(cpu->opcode)] &= cpu->V[OPCODE_Y(cpu->opcode)]; } break;
+
+                case OPCODE_LOGICAL_XOR:
+                { cpu->V[OPCODE_X(cpu->opcode)] ^= cpu->V[OPCODE_Y(cpu->opcode)]; } break;
+
+                case OPCODE_ADD:
+                {
+                    cpu->VF = 0;
+                    if ((int)cpu->V[OPCODE_X(cpu->opcode)] + (int)cpu->V[OPCODE_Y(cpu->opcode)] > 255) cpu->VF = 1; // Notify overflow
+                    cpu->V[OPCODE_X(cpu->opcode)] += cpu->V[OPCODE_Y(cpu->opcode)];
+                } break;
+
+                case OPCODE_SUBTRACT_XY:
+                { cpu->V[OPCODE_X(cpu->opcode)] -= cpu->V[OPCODE_Y(cpu->opcode)]; } break;
+
+                case OPCODE_SUBTRACT_YX:
+                {
+                    cpu->VF = 1;
+                    if (cpu->V[OPCODE_X(cpu->opcode)] > cpu->V[OPCODE_Y(cpu->opcode)]) cpu->VF = 0; // Notify overflow 2.0
+                    cpu->V[OPCODE_Y(cpu->opcode)] -= cpu->V[OPCODE_X(cpu->opcode)];
+
+                } break;
+
+                case OPCODE_SHIFT_RIGHT:
+                {
+                    cpu->V[OPCODE_X(cpu->opcode)] = cpu->V[OPCODE_Y(cpu->opcode)];
+                    cpu->VF = cpu->V[OPCODE_X(cpu->opcode)] & 0b00000001;
+                    cpu->V[OPCODE_X(cpu->opcode)] >>= 1;
+                } break;
+
+                case OPCODE_SHIFT_LEFT:
+                {
+                    cpu->V[OPCODE_X(cpu->opcode)] = cpu->V[OPCODE_Y(cpu->opcode)];
+                    cpu->VF = cpu->V[OPCODE_X(cpu->opcode)] & 0b10000000;
+                    cpu->V[OPCODE_X(cpu->opcode)] <<= 1;
+                } break;
+
+            } break;
+        } break;
 
         case OPCODE_JUMP:
-            { cpu->pc = cpu->opcode & 0x0FFF; /* Jump to target */ }
+            { cpu->pc = OPCODE_NNN(cpu->opcode); /* Jump to target */ }
             break;
 
         case OPCODE_CALL_SUBROUTINE:
@@ -206,53 +255,39 @@ void DecodeAndExecute(chip8* cpu)
             cpu->stack[cpu->sp] = prevPos;
             cpu->sp++;
 
-            cpu->pc = cpu->opcode & 0x0FFF; // Jump 2.0
-        }
-            break;
+            cpu->pc = OPCODE_NNN(cpu->opcode); // Jump 2.0
+        } break;
 
         case OPCODE_REG_IS_VALUE:
         {
             // NOTE: we skip the next instruction if the condition is not true. Hence the inverted if statements
-            if (cpu->V[cpu->opcode & 0x0F00] != (cpu->opcode & 0x00FF)) cpu->pc+=2; 
-        }
-            break;
+            if (cpu->V[OPCODE_X(cpu->opcode)] != OPCODE_NN(cpu->opcode)) cpu->pc+=2;
+        } break;
 
         case OPCODE_REG_IS_NOT_VALUE:
-        {
-            if (cpu->V[cpu->opcode & 0x0F00] == (cpu->opcode & 0x00FF)) cpu->pc+=2; 
-        }
-            break;
+            { if (cpu->V[OPCODE_X(cpu->opcode)] == OPCODE_NN(cpu->opcode)) cpu->pc+=2; } break;
 
         case OPCODE_REG_IS_REG:
-        {
-            if (cpu->V[cpu->opcode & 0x0F00] != cpu->V[cpu->opcode & 0x00F0]) cpu->pc+=2;
-        }
-            break;
+            { if (cpu->V[OPCODE_X(cpu->opcode)] != cpu->V[OPCODE_Y(cpu->opcode)]) cpu->pc+=2; } break;
 
         case OPCODE_REG_IS_NOT_REG:
-        {
-            if (cpu->V[cpu->opcode & 0x0F00] == cpu->V[cpu->opcode & 0x00F0]) cpu->pc+=2;
-        }
-            break;
+            { if (cpu->V[OPCODE_X(cpu->opcode)] == cpu->V[OPCODE_Y(cpu->opcode)]) cpu->pc+=2; } break;
 
         case OPCODE_SET_REG:
-            { cpu->V[(cpu->opcode & 0x0F00) >> 8] = (cpu->opcode & 0x00FF); /* Bitshift to get value between 0 and F */ }
-            break;
+            { cpu->V[OPCODE_X(cpu->opcode)] = OPCODE_NN(cpu->opcode); /* Bitshift to get value between 0 and F */ } break;
 
         case OPCODE_ADD_TO_REG:
-            { cpu->V[(cpu->opcode & 0x0F00) >> 8] += (cpu->opcode & 0x00FF); }
-            break;
+            { cpu->V[OPCODE_X(cpu->opcode)] += OPCODE_NN(cpu->opcode); } break;
 
         case OPCODE_SET_INDEX_REG:
-             { cpu->I = cpu->opcode & 0x0FFF; }
-            break;
+             { cpu->I = OPCODE_NNN(cpu->opcode); } break;
 
         case OPCODE_DISPLAY:
         {
             cpu->VF = 0;
-            uint8_t x = cpu->V[(cpu->opcode & 0x0F00) >> 8] % SCREEN_WIDTH;
-            uint8_t y = cpu->V[(cpu->opcode & 0x00F0) >> 4] % SCREEN_HEIGHT;
-            uint8_t height = cpu->opcode & 0x000F;
+            uint8_t x = cpu->V[OPCODE_X(cpu->opcode)] % SCREEN_WIDTH;
+            uint8_t y = cpu->V[OPCODE_Y(cpu->opcode)] % SCREEN_HEIGHT;
+            uint8_t height = OPCODE_N(cpu->opcode);
 
             for (int j=0; j<height; j++)
             {
@@ -265,15 +300,13 @@ void DecodeAndExecute(chip8* cpu)
                     if ((spriteRow << i) & 0b10000000) cpu->display[x+i][y+j] = !cpu->display[x+i][y+j];
                 }
             }
-        }
-            break;
+        } break;
 
         default:
         {
             printf("[ERROR]: Invalid opcode: '%04x'\n", cpu->opcode);
             cpu->halted = 1;
-        }
-            break;
+        } break;
     }
 }
 
