@@ -43,6 +43,8 @@ typedef struct {
     uint8_t delayTimer;
     uint8_t soundTimer;
 
+    uint8_t halted;
+
 } chip8;
 
 void UpdateWindowDisplay(chip8* cpu)
@@ -121,6 +123,7 @@ chip8 InitProgram(char* path)
 // Opcode types
 #define OPCODE_CLEAR_SCREEN 0x00E0
 #define OPCODE_JUMP 0x1000
+#define OPCODE_CALL_SUBROUTINE 0x2000
 #define OPCODE_SET_REG 0x6000
 #define OPCODE_ADD_TO_REG 0x7000
 #define OPCODE_SET_INDEX_REG 0xA000
@@ -137,67 +140,55 @@ void DecodeAndExecute(chip8* cpu)
                 case OPCODE_CLEAR_SCREEN:
                 {
                     // We clear the screen this way because it is a 2D array
-                    printf("Clearing..\n");
                     for (int x=0; x<SCREEN_WIDTH; x++) { memset(cpu->display[x], 0, SCREEN_HEIGHT); }
-                    break;
                 }
-                break;
+                    break;
+
+                default:
+                    printf("[ERROR]: Invalid opcode.\n");
+                    cpu->halted = 1;
+                    break;
             }
             break;
 
         case OPCODE_JUMP:
-        {    
-            printf("Jumping...\n");
-            cpu->pc = cpu->opcode & 0x0FFF; // Jump to target
-            printf("Address: %x\n", cpu->opcode & 0x0FFF);
-        }
-        break;
+            { cpu->pc = cpu->opcode & 0x0FFF; /* Jump to target */ }
+            break;
 
         case OPCODE_SET_REG:
-            printf("Setting register...\n");
-            cpu->V[(cpu->opcode & 0x0F00) >> 8] = (cpu->opcode & 0x00FF); // Bitshift to get value between 0 and F
-            printf("Register: %x, Value: %x\n", (cpu->opcode & 0x0F00) >> 8, cpu->opcode & 0x00FF);
+            { cpu->V[(cpu->opcode & 0x0F00) >> 8] = (cpu->opcode & 0x00FF); /* Bitshift to get value between 0 and F */ }
             break;
 
         case OPCODE_ADD_TO_REG:
-            printf("Adding...\n");
-            cpu->V[(cpu->opcode & 0x0F00) >> 8] += (cpu->opcode & 0x00FF);
-            printf("Index: %x, Modifier: %x\n", (cpu->opcode & 0x0F00) >> 8, cpu->opcode & 0x00FF);
+            { cpu->V[(cpu->opcode & 0x0F00) >> 8] += (cpu->opcode & 0x00FF); }
             break;
 
         case OPCODE_SET_INDEX_REG:
-            printf("Setting index register...\n");
-            cpu->I = cpu->opcode & 0x0FFF;
-            printf("Index: %x\n", cpu->opcode & 0x0FFF);
+             { cpu->I = cpu->opcode & 0x0FFF; }
             break;
 
         case OPCODE_DISPLAY:
-            // THIS ONE IS STILL BROKEN :(
-            cpu->VF = 0;
-            printf("Displaying...\n");
-            uint8_t x = cpu->V[(cpu->opcode & 0x0F00) >> 8] % SCREEN_WIDTH;
-            uint8_t y = cpu->V[(cpu->opcode & 0x00F0) >> 4] % SCREEN_HEIGHT;
-            uint8_t height = cpu->opcode & 0x000F;
-            printf("Drawing at x: %d, y: %d. With a height of %d\n", x, y, height);
-
-            for (int j=0; j<height; j++)
             {
-                if (y+j>=SCREEN_HEIGHT) break;
-                uint8_t spriteRow = cpu->memory[cpu->I+j];
-                if (j % 2 == 0) printf("%08b\n", spriteRow);
-                for (int i=0; i<8; i++)
+                cpu->VF = 0;
+                uint8_t x = cpu->V[(cpu->opcode & 0x0F00) >> 8] % SCREEN_WIDTH;
+                uint8_t y = cpu->V[(cpu->opcode & 0x00F0) >> 4] % SCREEN_HEIGHT;
+                uint8_t height = cpu->opcode & 0x000F;
+
+                for (int j=0; j<height; j++)
                 {
-                    if (x+i>=SCREEN_WIDTH) break;
-                    if (cpu->display[x+i][y+j]) cpu->VF = 1;
-                    if ((spriteRow << i) & 0b10000000) cpu->display[x+i][y+j] = !cpu->display[x+i][y+j];
+                    if (y+j>=SCREEN_HEIGHT) break;
+                    uint8_t spriteRow = cpu->memory[cpu->I+j];
+                    for (int i=0; i<8; i++)
+                    {
+                        if (x+i>=SCREEN_WIDTH) break;
+                        if (cpu->display[x+i][y+j]) cpu->VF = 1;
+                        if ((spriteRow << i) & 0b10000000) cpu->display[x+i][y+j] = !cpu->display[x+i][y+j];
+                    }
                 }
             }
-            
             break;
     }
 }
-
-#include <unistd.h>
 
 void EmulateCycle(chip8* cpu)
 {
@@ -210,27 +201,46 @@ void EmulateCycle(chip8* cpu)
 
     // Fetch instruction
     cpu->opcode = cpu->memory[cpu->pc] << 8 | cpu->memory[cpu->pc+1]; // Combine the two bytes to create the opcode
-    printf("[0x%08x]: %04x\n", cpu->pc, cpu->opcode);
+    //printf("[0x%08x]: %04x\n", cpu->pc, cpu->opcode);
     cpu->pc+=2; // increment program counter by 2
 
     DecodeAndExecute(cpu);
-
-    //sleep(1);
 }
 
 int main( int argc, char* args[] )
 {
-    chip8 cpu = InitProgram("IBM Logo.ch8");
+    // Error handling yippe :D
+    if (argc <= 1)
+    {
+        printf("[ERROR]: Not enough arguments.\n");
+        return -1;
+    }
+    else if (argc > 2) {
+        printf("[WARNING]: Too many arguments. Only using the first one.\n");
+    }
+    if (strlen(args[1]) <= 4)
+    {
+        printf("[ERROR]: Invalid file name. Must be more than 4 characters long.\n");
+        return -1;
+    }
+    if (strcmp(((char*)args[1] + strlen(args[1])-4), ".ch8"))
+    {
+        printf("[ERROR]: Invalid filetype. File must have '.ch8' extension.");
+        return -1;
+    }
+
+
+    chip8 cpu = InitProgram(args[1]);
     InitWindow("CHIP-8", SCREEN_WIDTH*SCALE, SCREEN_HEIGHT*SCALE);
 
     SDL_Event e;
-    int SDL_running = 1;
-    
-    while (SDL_running)
+    cpu.halted = 0;
+
+    while (!cpu.halted)
     {
         while(SDL_PollEvent(&e))
         {
-            if(e.type==SDL_QUIT) SDL_running = 0; 
+            if(e.type==SDL_QUIT) cpu.halted = 1; 
         }
 
         // Update input
