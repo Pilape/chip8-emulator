@@ -33,7 +33,7 @@ typedef struct {
     uint8_t V[16]; // General purpose registers
     uint16_t I; // Index register
     uint16_t pc; // Program counter
-    uint8_t VF;
+    uint8_t VF; // Carry flag
 
     uint16_t stack[16]; // We love the stack
     uint8_t sp; // Stack pointer
@@ -121,13 +121,31 @@ chip8 InitProgram(char* path)
 }
 
 // Opcode types
-#define OPCODE_CLEAR_SCREEN 0x00E0
-#define OPCODE_JUMP 0x1000
-#define OPCODE_CALL_SUBROUTINE 0x2000
-#define OPCODE_SET_REG 0x6000
-#define OPCODE_ADD_TO_REG 0x7000
-#define OPCODE_SET_INDEX_REG 0xA000
-#define OPCODE_DISPLAY 0xD000
+#define OPCODE_NO_ARGS // Opcodes with no arguments
+    #define OPCODE_CLEAR_SCREEN 0x00E0 // Clear the screen
+
+#define OPCODE_RETURN_SUBROUTINE 0x00EE // Returns from subroutine/function
+#define OPCODE_JUMP 0x1000 // Jumps to position
+#define OPCODE_CALL_SUBROUTINE 0x2000 // Calls subroutine/function
+
+#define OPCODE_REG_IS_VALUE 0x3000 // If register is equal to value
+#define OPCODE_REG_IS_NOT_VALUE 0x4000 // If register is not equal to value
+#define OPCODE_REG_IS_REG 0x5000 // If register is equal to other register
+#define OPCODE_REG_IS_NOT_REG 0x9000 // If register is not equal to other registers
+
+#define OPCODE_SET_REG 0x6000 // Set register to value
+#define OPCODE_ADD_TO_REG 0x7000 // Add value to register
+#define OPCODE_SET_INDEX_REG 0xA000 // Set index register
+#define OPCODE_DISPLAY 0xD000 // Draw sprite
+
+#define OPCODE_ARITHMETIC 0x8000 // Various logic and arithmetic opcodes 
+    #define OPCODE_SET 0x0 // VX is set to the value of VY
+    #define OPCODE_BINARY_OR 0x1 // VX is set to the binary OR of VX and VY
+    #define OPCODE_BINARY_AND 0x2 // VX is set to the binary AND of VX and VY
+    #define OPCODE_LOGICAL_XOR 0x3 // VX is set to the XOR of VX and VY
+    #define OPCODE_ADD 0x4 // VX is set to VX + VY
+    #define OPCODE_SUBTRACT_XY 0x5 // VX is set to VX - VY
+    #define OPCODE_SUBTRACT_YX 0x7 // VX is set to VY - VX
 
 // We do both at the same time because it is simpler, atleast for the CHIP-8
 void DecodeAndExecute(chip8* cpu)
@@ -144,15 +162,77 @@ void DecodeAndExecute(chip8* cpu)
                 }
                     break;
 
+                case OPCODE_RETURN_SUBROUTINE:
+                {
+                    if (cpu->sp == 0)
+                    {
+                        printf("[WARNING]: Stack is empty. Ignoring instruction.\n");
+                        break;
+                    }
+                    cpu->sp--;
+                    cpu->pc = cpu->stack[cpu->sp];
+                }
+                    break;
+
                 default:
-                    printf("[ERROR]: Invalid opcode.\n");
+                {
+                    printf("[ERROR]: Invalid opcode: '%04x'\n", cpu->opcode);
                     cpu->halted = 1;
+                }
                     break;
             }
             break;
 
+        /*case OPCODE_ARITHMETIC:
+        {
+
+        }
+            break;*/
+
         case OPCODE_JUMP:
             { cpu->pc = cpu->opcode & 0x0FFF; /* Jump to target */ }
+            break;
+
+        case OPCODE_CALL_SUBROUTINE:
+        {
+            uint16_t prevPos = cpu->pc; // Store previous pc position
+
+            // Push previous position to stack
+            if (cpu->sp >=16) // Not if there is no space
+            {
+                printf("[ERROR]: Stack overflow.\n");
+                cpu->halted = 1;
+            }
+            cpu->stack[cpu->sp] = prevPos;
+            cpu->sp++;
+
+            cpu->pc = cpu->opcode & 0x0FFF; // Jump 2.0
+        }
+            break;
+
+        case OPCODE_REG_IS_VALUE:
+        {
+            // NOTE: we skip the next instruction if the condition is not true. Hence the inverted if statements
+            if (cpu->V[cpu->opcode & 0x0F00] != (cpu->opcode & 0x00FF)) cpu->pc+=2; 
+        }
+            break;
+
+        case OPCODE_REG_IS_NOT_VALUE:
+        {
+            if (cpu->V[cpu->opcode & 0x0F00] == (cpu->opcode & 0x00FF)) cpu->pc+=2; 
+        }
+            break;
+
+        case OPCODE_REG_IS_REG:
+        {
+            if (cpu->V[cpu->opcode & 0x0F00] != cpu->V[cpu->opcode & 0x00F0]) cpu->pc+=2;
+        }
+            break;
+
+        case OPCODE_REG_IS_NOT_REG:
+        {
+            if (cpu->V[cpu->opcode & 0x0F00] == cpu->V[cpu->opcode & 0x00F0]) cpu->pc+=2;
+        }
             break;
 
         case OPCODE_SET_REG:
@@ -168,24 +248,31 @@ void DecodeAndExecute(chip8* cpu)
             break;
 
         case OPCODE_DISPLAY:
-            {
-                cpu->VF = 0;
-                uint8_t x = cpu->V[(cpu->opcode & 0x0F00) >> 8] % SCREEN_WIDTH;
-                uint8_t y = cpu->V[(cpu->opcode & 0x00F0) >> 4] % SCREEN_HEIGHT;
-                uint8_t height = cpu->opcode & 0x000F;
+        {
+            cpu->VF = 0;
+            uint8_t x = cpu->V[(cpu->opcode & 0x0F00) >> 8] % SCREEN_WIDTH;
+            uint8_t y = cpu->V[(cpu->opcode & 0x00F0) >> 4] % SCREEN_HEIGHT;
+            uint8_t height = cpu->opcode & 0x000F;
 
-                for (int j=0; j<height; j++)
+            for (int j=0; j<height; j++)
+            {
+                if (y+j>=SCREEN_HEIGHT) break;
+                uint8_t spriteRow = cpu->memory[cpu->I+j];
+                for (int i=0; i<8; i++)
                 {
-                    if (y+j>=SCREEN_HEIGHT) break;
-                    uint8_t spriteRow = cpu->memory[cpu->I+j];
-                    for (int i=0; i<8; i++)
-                    {
-                        if (x+i>=SCREEN_WIDTH) break;
-                        if (cpu->display[x+i][y+j]) cpu->VF = 1;
-                        if ((spriteRow << i) & 0b10000000) cpu->display[x+i][y+j] = !cpu->display[x+i][y+j];
-                    }
+                    if (x+i>=SCREEN_WIDTH) break;
+                    if (cpu->display[x+i][y+j]) cpu->VF = 1;
+                    if ((spriteRow << i) & 0b10000000) cpu->display[x+i][y+j] = !cpu->display[x+i][y+j];
                 }
             }
+        }
+            break;
+
+        default:
+        {
+            printf("[ERROR]: Invalid opcode: '%04x'\n", cpu->opcode);
+            cpu->halted = 1;
+        }
             break;
     }
 }
