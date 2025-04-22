@@ -130,7 +130,7 @@ chip8 InitProgram(char* path)
 }
 
 // Opcode types
-#define OPCODE_NO_ARGS // Opcodes with no arguments
+#define OPCODE_NO_ARGS 0x0000 // Opcodes with no arguments
     #define OPCODE_CLEAR_SCREEN 0x00E0 // Clear the screen
 
 #define OPCODE_RETURN_SUBROUTINE 0x00EE // Returns from subroutine/function
@@ -146,6 +146,7 @@ chip8 InitProgram(char* path)
 #define OPCODE_ADD_TO_REG 0x7000 // Add value to register
 #define OPCODE_SET_INDEX_REG 0xA000 // Set index register
 #define OPCODE_JUMP_OFFSET 0xB000 // Jumps with the offset of V0 (COSMAC VIP implementation)
+#define OPCODE_RANDOM 0xC000 // Sets VX to a random number binary ANDed with NN
 #define OPCODE_DISPLAY 0xD000 // Draw sprite
 
 #define OPCODE_ARITHMETIC 0x8000 // Various logic and arithmetic opcodes 
@@ -168,6 +169,10 @@ chip8 InitProgram(char* path)
     #define OPCODE_LOAD_MEMORY 0x65 // Loads registers from memory
     #define OPCODE_CONVERT_DECIMAL 0x33 // Finds the 3 decimal digits of VX and stores it in memory
     #define OPCODE_ADD_TO_INDEX 0x1E // Adds VX to index
+    #define OPCODE_GET_DELAY_TIMER 0x07 // Sets VX to current value of delay delayTimer
+    #define OPCODE_SET_DELAY_TIMER 0x15 // Sets delayTimer to VX
+    #define OPCODE_SET_SOUND_TIMER 0x18 // Sets soundTimer to VX
+    #define OPCODE_AWAIT_KEY 0x0A // Traps program in loop until key pressed
 
 #define OPCODE_X(opcode) ((opcode & 0x0F00) >> 8)
 #define OPCODE_Y(opcode) ((opcode & 0x00F0) >> 4)
@@ -259,8 +264,10 @@ void DecodeAndExecute(chip8* cpu)
         } break;
 
         case OPCODE_JUMP:
-            { cpu->pc = OPCODE_NNN(cpu->opcode); /* Jump to target */ }
-            break;
+            { cpu->pc = OPCODE_NNN(cpu->opcode); /* Jump to target */ } break;
+
+        case OPCODE_RANDOM:
+            { cpu->V[OPCODE_X(cpu->opcode)] = (rand() % 255) & OPCODE_NN(cpu->opcode); } break;
 
         case OPCODE_CALL_SUBROUTINE:
         {
@@ -330,6 +337,36 @@ void DecodeAndExecute(chip8* cpu)
                     cpu->I += cpu->V[OPCODE_X(cpu->opcode)];
                 } break;
 
+                case OPCODE_GET_DELAY_TIMER:
+                {
+                    cpu->V[OPCODE_X(cpu->opcode)] = cpu->delayTimer;
+                } break;
+
+                case OPCODE_SET_DELAY_TIMER:
+                {
+                    cpu->delayTimer = cpu->V[OPCODE_X(cpu->opcode)];
+                } break;
+
+                case OPCODE_SET_SOUND_TIMER:
+                {
+                    cpu->soundTimer = cpu->V[OPCODE_X(cpu->opcode)];
+                } break;
+
+                case OPCODE_AWAIT_KEY:
+                {
+                    printf("a");
+                    for (int i=0; i<16; i++)
+                    {
+                        if (cpu->keys[SDL_inputs[i]])
+                        {
+                            cpu->V[OPCODE_X(cpu->opcode)] = i;
+                            cpu->pc+=2;            
+                            break;
+                        }
+                    }
+                    cpu->pc-=2;
+                } break;
+
                 default:
                 {
                     printf("[ERROR]: Invalid opcode: '%04x'\n", cpu->opcode);
@@ -389,7 +426,7 @@ void EmulateCycle(chip8* cpu)
 
     // Fetch instruction
     cpu->opcode = cpu->memory[cpu->pc] << 8 | cpu->memory[cpu->pc+1]; // Combine the two bytes to create the opcode
-    //printf("[0x%08x]: %04x\n", cpu->pc, cpu->opcode);
+    printf("[0x%08x]: %04x\n", cpu->pc, cpu->opcode);
     cpu->pc+=2; // increment program counter by 2
 
     DecodeAndExecute(cpu);
@@ -431,11 +468,16 @@ int main( int argc, char* args[] )
             if(e.type==SDL_QUIT) cpu.halted = 1; 
         }
 
-        // Update input
-        SDL_PumpEvents();
-        cpu.keys = (char*)SDL_GetKeyboardState(NULL); // Casting to char* because SDL sucks and returns a const char? Not good practice
+        // Update multiple times a frame to speed up program
+        for (int i=0; i<5; i++)
+        {
+            // Update input
+            SDL_PumpEvents();
+            cpu.keys = (char*)SDL_GetKeyboardState(NULL); // Casting to char* because SDL sucks and returns a const char? Not good practice
 
-        EmulateCycle(&cpu);
+            EmulateCycle(&cpu);
+        }
+    
         UpdateWindowDisplay(&cpu);
     }
 
