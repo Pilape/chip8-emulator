@@ -4,6 +4,7 @@
 #include <string.h>
 #include <time.h>
 #include <stdlib.h>
+#include <math.h>
 
 #define SCREEN_WIDTH 64
 #define SCREEN_HEIGHT 32
@@ -83,6 +84,14 @@ uint8_t fontSet[80] = {
   0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 };
 
+// Keys
+SDL_Scancode SDL_inputs[16] = {
+    SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3, SDL_SCANCODE_4,
+    SDL_SCANCODE_Q, SDL_SCANCODE_W, SDL_SCANCODE_E, SDL_SCANCODE_R,
+    SDL_SCANCODE_A, SDL_SCANCODE_S, SDL_SCANCODE_D, SDL_SCANCODE_F,
+    SDL_SCANCODE_Z, SDL_SCANCODE_X, SDL_SCANCODE_C, SDL_SCANCODE_V,
+};
+
 chip8 InitProgram(char* path)
 {
     chip8 cpu = { 0 };
@@ -136,6 +145,7 @@ chip8 InitProgram(char* path)
 #define OPCODE_SET_REG 0x6000 // Set register to value
 #define OPCODE_ADD_TO_REG 0x7000 // Add value to register
 #define OPCODE_SET_INDEX_REG 0xA000 // Set index register
+#define OPCODE_JUMP_OFFSET 0xB000 // Jumps with the offset of V0 (COSMAC VIP implementation)
 #define OPCODE_DISPLAY 0xD000 // Draw sprite
 
 #define OPCODE_ARITHMETIC 0x8000 // Various logic and arithmetic opcodes 
@@ -148,7 +158,17 @@ chip8 InitProgram(char* path)
     #define OPCODE_SUBTRACT_YX 0x7 // VX is set to VY - VX
     #define OPCODE_SHIFT_RIGHT 0x6 // Sets VX to VY and shifts VX to the right (We are using the COSMAC VIP implementation for now)
     #define OPCODE_SHIFT_LEFT 0xE // Like OPCODE_SHIFT_RIGHT but we shift left
-    
+
+#define OPCODE_KEY_SKIP 0xE000
+    #define OPCODE_SKIP_IF_KEY 0x9E
+    #define OPCODE_SKIP_IF_NOT_KEY 0xA1
+
+#define OPCODE_F 0xF000 // Group of misc opcodes
+    #define OPCODE_STORE_MEMORY 0x55 // Stores registers to memory
+    #define OPCODE_LOAD_MEMORY 0x65 // Loads registers from memory
+    #define OPCODE_CONVERT_DECIMAL 0x33 // Finds the 3 decimal digits of VX and stores it in memory
+    #define OPCODE_ADD_TO_INDEX 0x1E // Adds VX to index
+
 #define OPCODE_X(opcode) ((opcode & 0x0F00) >> 8)
 #define OPCODE_Y(opcode) ((opcode & 0x00F0) >> 4)
 #define OPCODE_NNN(opcode) (opcode & 0x0FFF)
@@ -217,7 +237,7 @@ void DecodeAndExecute(chip8* cpu)
                 {
                     cpu->VF = 1;
                     if (cpu->V[OPCODE_X(cpu->opcode)] > cpu->V[OPCODE_Y(cpu->opcode)]) cpu->VF = 0; // Notify overflow 2.0
-                    cpu->V[OPCODE_Y(cpu->opcode)] -= cpu->V[OPCODE_X(cpu->opcode)];
+                    cpu->V[OPCODE_X(cpu->opcode)] = cpu->V[OPCODE_Y(cpu->opcode)] - cpu->V[OPCODE_X(cpu->opcode)];
 
                 } break;
 
@@ -280,6 +300,55 @@ void DecodeAndExecute(chip8* cpu)
 
         case OPCODE_SET_INDEX_REG:
              { cpu->I = OPCODE_NNN(cpu->opcode); } break;
+
+        case OPCODE_JUMP_OFFSET:
+            { cpu->pc = OPCODE_NNN(cpu->opcode) + cpu->V[0]; } break;
+
+        case OPCODE_F:
+        {
+            switch (OPCODE_NN(cpu->opcode))
+            {
+                case OPCODE_STORE_MEMORY:
+                {
+                    for (int i=0; i<=OPCODE_X(cpu->opcode); i++) cpu->memory[cpu->I + i] = cpu->V[i];
+                } break;
+
+                case OPCODE_LOAD_MEMORY:
+                {
+                    for (int i=0; i<=OPCODE_X(cpu->opcode); i++) cpu->V[i] = cpu->memory[cpu->I + i];
+                } break;
+
+                case OPCODE_CONVERT_DECIMAL:
+                {
+                    cpu->memory[cpu->I] = cpu->V[OPCODE_X(cpu->opcode)] / 100;
+                    cpu->memory[cpu->I+1] = (cpu->V[OPCODE_X(cpu->opcode)] / 10) %10;
+                    cpu->memory[cpu->I+2] = cpu->V[OPCODE_X(cpu->opcode)] % 10;
+                } break;
+
+                case OPCODE_ADD_TO_INDEX:
+                {
+                    cpu->I += cpu->V[OPCODE_X(cpu->opcode)];
+                } break;
+
+                default:
+                {
+                    printf("[ERROR]: Invalid opcode: '%04x'\n", cpu->opcode);
+                    cpu->halted = 1;
+                } break;
+            }
+        } break;
+
+        case OPCODE_KEY_SKIP:
+        {
+            switch (OPCODE_NN(cpu->opcode))
+            {
+                case OPCODE_SKIP_IF_KEY:
+                    { if (cpu->keys[SDL_inputs[OPCODE_X(cpu->opcode)]]) cpu->pc++; } break;
+
+                case OPCODE_SKIP_IF_NOT_KEY:
+                    { if (!(cpu->keys[SDL_inputs[OPCODE_X(cpu->opcode)]])) cpu->pc++; } break;
+            } 
+        } break;
 
         case OPCODE_DISPLAY:
         {
