@@ -260,18 +260,17 @@ void DecodeAndExecute(chip8* cpu)
 
         case OPCODE_REG_IS_VALUE:
         {
-            // NOTE: we skip the next instruction if the condition is not true. Hence the inverted if statements
-            if (cpu->V[OPCODE_X(cpu->opcode)] != OPCODE_NN(cpu->opcode)) cpu->pc+=2;
+            if (cpu->V[OPCODE_X(cpu->opcode)] == OPCODE_NN(cpu->opcode)) cpu->pc+=2;
         } break;
 
         case OPCODE_REG_IS_NOT_VALUE:
-            { if (cpu->V[OPCODE_X(cpu->opcode)] == OPCODE_NN(cpu->opcode)) cpu->pc+=2; } break;
+            { if (cpu->V[OPCODE_X(cpu->opcode)] != OPCODE_NN(cpu->opcode)) cpu->pc+=2; } break;
 
         case OPCODE_REG_IS_REG:
-            { if (cpu->V[OPCODE_X(cpu->opcode)] != cpu->V[OPCODE_Y(cpu->opcode)]) cpu->pc+=2; } break;
+            { if (cpu->V[OPCODE_X(cpu->opcode)] == cpu->V[OPCODE_Y(cpu->opcode)]) cpu->pc+=2; } break;
 
         case OPCODE_REG_IS_NOT_REG:
-            { if (cpu->V[OPCODE_X(cpu->opcode)] == cpu->V[OPCODE_Y(cpu->opcode)]) cpu->pc+=2; } break;
+            { if (cpu->V[OPCODE_X(cpu->opcode)] != cpu->V[OPCODE_Y(cpu->opcode)]) cpu->pc+=2; } break;
 
         case OPCODE_SET_REG:
             { cpu->V[OPCODE_X(cpu->opcode)] = OPCODE_NN(cpu->opcode); /* Bitshift to get value between 0 and F */ } break;
