@@ -231,7 +231,9 @@ void DecodeAndExecute(chip8* cpu)
                 case OPCODE_ADD:
                 {
                     cpu->VF = 0;
-                    if ((int)cpu->V[OPCODE_X(cpu->opcode)] + (int)cpu->V[OPCODE_Y(cpu->opcode)] > 255) cpu->VF = 1; // Notify overflow
+                    if (cpu->V[OPCODE_X(cpu->opcode)] + cpu->V[OPCODE_Y(cpu->opcode)] > 0xFF) cpu->VF = 1;
+
+                    printf("%d\n", cpu->VF);
                     cpu->V[OPCODE_X(cpu->opcode)] += cpu->V[OPCODE_Y(cpu->opcode)];
                 } break;
 
@@ -258,6 +260,12 @@ void DecodeAndExecute(chip8* cpu)
                     cpu->V[OPCODE_X(cpu->opcode)] = cpu->V[OPCODE_Y(cpu->opcode)];
                     cpu->VF = cpu->V[OPCODE_X(cpu->opcode)] & 0b10000000;
                     cpu->V[OPCODE_X(cpu->opcode)] <<= 1;
+                } break;
+
+                default:
+                {
+                    printf("[ERROR]: Invalid opcode: '%04x'\n", cpu->opcode);
+                    cpu->halted = 1;
                 } break;
 
             } break;
