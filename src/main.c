@@ -31,10 +31,10 @@ typedef struct {
     uint8_t display[SCREEN_WIDTH][SCREEN_HEIGHT]; // 1-bit screen
    
     // Registers
-    uint8_t V[16]; // General purpose registers
+    uint8_t V[16]; // General purpose registers VF is also carry flag
     uint16_t I; // Index register
     uint16_t pc; // Program counter
-    uint8_t VF; // Carry flag
+    //uint8_t VF; // Carry flag
 
     uint16_t stack[16]; // We love the stack
     uint8_t sp; // Stack pointer
@@ -230,36 +230,56 @@ void DecodeAndExecute(chip8* cpu)
 
                 case OPCODE_ADD:
                 {
-                    cpu->VF = 0;
-                    if (cpu->V[OPCODE_X(cpu->opcode)] + cpu->V[OPCODE_Y(cpu->opcode)] > 0xFF) cpu->VF = 1;
+                    int vX = cpu->V[OPCODE_X(cpu->opcode)];
+                    int vY = cpu->V[OPCODE_Y(cpu->opcode)];
 
-                    printf("%d\n", cpu->VF);
                     cpu->V[OPCODE_X(cpu->opcode)] += cpu->V[OPCODE_Y(cpu->opcode)];
+
+                    cpu->V[0xF] = (vX + vY > 255) ? 1 : 0; // Check for overflow
+
                 } break;
 
                 case OPCODE_SUBTRACT_XY:
-                { cpu->V[OPCODE_X(cpu->opcode)] -= cpu->V[OPCODE_Y(cpu->opcode)]; } break;
+                {
+                    uint8_t vX = cpu->V[OPCODE_X(cpu->opcode)];
+                    uint8_t vY = cpu->V[OPCODE_Y(cpu->opcode)];
+
+                    cpu->V[OPCODE_X(cpu->opcode)] = vX - vY;
+
+                    cpu->V[0xF] = (vY > vX) ? 0 : 1;
+
+                } break;
 
                 case OPCODE_SUBTRACT_YX:
                 {
-                    cpu->VF = 1;
-                    if (cpu->V[OPCODE_X(cpu->opcode)] > cpu->V[OPCODE_Y(cpu->opcode)]) cpu->VF = 0; // Notify overflow 2.0
-                    cpu->V[OPCODE_X(cpu->opcode)] = cpu->V[OPCODE_Y(cpu->opcode)] - cpu->V[OPCODE_X(cpu->opcode)];
+                    uint8_t vX = cpu->V[OPCODE_X(cpu->opcode)];
+                    uint8_t vY = cpu->V[OPCODE_Y(cpu->opcode)];
+
+                    cpu->V[OPCODE_X(cpu->opcode)] = vY - vX;
+
+                    cpu->V[0xF] = (vX > vY) ? 0 : 1;
 
                 } break;
 
                 case OPCODE_SHIFT_RIGHT:
                 {
                     cpu->V[OPCODE_X(cpu->opcode)] = cpu->V[OPCODE_Y(cpu->opcode)];
-                    cpu->VF = cpu->V[OPCODE_X(cpu->opcode)] & 0b00000001;
+                    uint8_t removedBit = cpu->V[OPCODE_X(cpu->opcode)] & 0b00000001;
+
                     cpu->V[OPCODE_X(cpu->opcode)] >>= 1;
+
+                    cpu->V[0xF] = removedBit; 
+ 
                 } break;
 
                 case OPCODE_SHIFT_LEFT:
                 {
                     cpu->V[OPCODE_X(cpu->opcode)] = cpu->V[OPCODE_Y(cpu->opcode)];
-                    cpu->VF = cpu->V[OPCODE_X(cpu->opcode)] & 0b10000000;
+                    uint8_t removedBit = (cpu->V[OPCODE_X(cpu->opcode)] & 0b10000000) >> 7;
+
                     cpu->V[OPCODE_X(cpu->opcode)] <<= 1;
+
+                    cpu->V[0xF] = removedBit; 
                 } break;
 
                 default:
@@ -397,7 +417,7 @@ void DecodeAndExecute(chip8* cpu)
 
         case OPCODE_DISPLAY:
         {
-            cpu->VF = 0;
+            cpu->V[0xF] = 0;
             uint8_t x = cpu->V[OPCODE_X(cpu->opcode)] % SCREEN_WIDTH;
             uint8_t y = cpu->V[OPCODE_Y(cpu->opcode)] % SCREEN_HEIGHT;
             uint8_t height = OPCODE_N(cpu->opcode);
@@ -409,7 +429,7 @@ void DecodeAndExecute(chip8* cpu)
                 for (int i=0; i<8; i++)
                 {
                     if (x+i>=SCREEN_WIDTH) break;
-                    if (cpu->display[x+i][y+j]) cpu->VF = 1;
+                    if (cpu->display[x+i][y+j]) cpu->V[0xF] = 1;
                     if ((spriteRow << i) & 0b10000000) cpu->display[x+i][y+j] = !cpu->display[x+i][y+j];
                 }
             }
