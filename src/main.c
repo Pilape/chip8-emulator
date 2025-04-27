@@ -190,12 +190,14 @@ void DecodeAndExecute(chip8* cpu)
             {
                 case OPCODE_CLEAR_SCREEN:
                 {
+                    printf("Clear screen\n");
                     // We clear the screen this way because it is a 2D array
                     for (int x=0; x<SCREEN_WIDTH; x++) { memset(cpu->display[x], 0, SCREEN_HEIGHT); }
                 } break;
 
                 case OPCODE_RETURN_SUBROUTINE:
                 {
+                    printf("RETURN\n");
                     if (cpu->sp == 0)
                     {
                         printf("[WARNING]: Stack is empty. Ignoring instruction.\n");
@@ -217,19 +219,32 @@ void DecodeAndExecute(chip8* cpu)
             switch (OPCODE_N(cpu->opcode))
             {
                 case OPCODE_SET:
-                { cpu->V[OPCODE_X(cpu->opcode)] = cpu->V[OPCODE_Y(cpu->opcode)]; } break;
+                {
+                    printf("SETREG %x %x\n", OPCODE_X(cpu->opcode), OPCODE_Y(cpu->opcode));
+                    cpu->V[OPCODE_X(cpu->opcode)] = cpu->V[OPCODE_Y(cpu->opcode)];
+                } break;
 
                 case OPCODE_BINARY_OR:
-                { cpu->V[OPCODE_X(cpu->opcode)] |= cpu->V[OPCODE_Y(cpu->opcode)]; } break;
+                {
+                    printf("OR %x %x\n", OPCODE_X(cpu->opcode), OPCODE_Y(cpu->opcode));
+                    cpu->V[OPCODE_X(cpu->opcode)] |= cpu->V[OPCODE_Y(cpu->opcode)];
+                } break;
 
                 case OPCODE_BINARY_AND:
-                { cpu->V[OPCODE_X(cpu->opcode)] &= cpu->V[OPCODE_Y(cpu->opcode)]; } break;
+                {
+                    printf("AND %x %x\n", OPCODE_X(cpu->opcode), OPCODE_Y(cpu->opcode));
+                    cpu->V[OPCODE_X(cpu->opcode)] &= cpu->V[OPCODE_Y(cpu->opcode)];
+                } break;
 
                 case OPCODE_LOGICAL_XOR:
-                { cpu->V[OPCODE_X(cpu->opcode)] ^= cpu->V[OPCODE_Y(cpu->opcode)]; } break;
+                {
+                    printf("XOR %x %x\n", OPCODE_X(cpu->opcode), OPCODE_Y(cpu->opcode));
+                    cpu->V[OPCODE_X(cpu->opcode)] ^= cpu->V[OPCODE_Y(cpu->opcode)];
+                } break;
 
                 case OPCODE_ADD:
                 {
+                    printf("REGADDREG %x %x\n", OPCODE_X(cpu->opcode), OPCODE_Y(cpu->opcode));
                     int vX = cpu->V[OPCODE_X(cpu->opcode)];
                     int vY = cpu->V[OPCODE_Y(cpu->opcode)];
 
@@ -241,6 +256,7 @@ void DecodeAndExecute(chip8* cpu)
 
                 case OPCODE_SUBTRACT_XY:
                 {
+                    printf("SUBXY %x %x\n", OPCODE_X(cpu->opcode), OPCODE_Y(cpu->opcode));
                     uint8_t vX = cpu->V[OPCODE_X(cpu->opcode)];
                     uint8_t vY = cpu->V[OPCODE_Y(cpu->opcode)];
 
@@ -252,6 +268,7 @@ void DecodeAndExecute(chip8* cpu)
 
                 case OPCODE_SUBTRACT_YX:
                 {
+                    printf("SUBYX %x %x\n", OPCODE_X(cpu->opcode), OPCODE_Y(cpu->opcode));
                     uint8_t vX = cpu->V[OPCODE_X(cpu->opcode)];
                     uint8_t vY = cpu->V[OPCODE_Y(cpu->opcode)];
 
@@ -263,6 +280,7 @@ void DecodeAndExecute(chip8* cpu)
 
                 case OPCODE_SHIFT_RIGHT:
                 {
+                    printf("SHIFTR %x %x\n", OPCODE_X(cpu->opcode), OPCODE_Y(cpu->opcode));
                     cpu->V[OPCODE_X(cpu->opcode)] = cpu->V[OPCODE_Y(cpu->opcode)];
                     uint8_t removedBit = cpu->V[OPCODE_X(cpu->opcode)] & 0b00000001;
 
@@ -274,6 +292,7 @@ void DecodeAndExecute(chip8* cpu)
 
                 case OPCODE_SHIFT_LEFT:
                 {
+                    printf("SHIFTL %x %x\n", OPCODE_X(cpu->opcode), OPCODE_Y(cpu->opcode));
                     cpu->V[OPCODE_X(cpu->opcode)] = cpu->V[OPCODE_Y(cpu->opcode)];
                     uint8_t removedBit = (cpu->V[OPCODE_X(cpu->opcode)] & 0b10000000) >> 7;
 
@@ -292,13 +311,20 @@ void DecodeAndExecute(chip8* cpu)
         } break;
 
         case OPCODE_JUMP:
-            { cpu->pc = OPCODE_NNN(cpu->opcode); /* Jump to target */ } break;
+            {
+                printf("JUMP %03x\n", OPCODE_NNN(cpu->opcode));
+                cpu->pc = OPCODE_NNN(cpu->opcode); // Jump to target
+            } break;
 
         case OPCODE_RANDOM:
-            { cpu->V[OPCODE_X(cpu->opcode)] = (rand() % 255) & OPCODE_NN(cpu->opcode); } break;
+            {
+                printf("RNG %x %02x\n", OPCODE_X(cpu->opcode), OPCODE_NN(cpu->opcode));
+                cpu->V[OPCODE_X(cpu->opcode)] = (rand() % 255) & OPCODE_NN(cpu->opcode);
+            } break;
 
         case OPCODE_CALL_SUBROUTINE:
         {
+            printf("SUBROUTINE CALL %03x\n", OPCODE_NNN(cpu->opcode));
             uint16_t prevPos = cpu->pc; // Store previous pc position
 
             // Push previous position to stack
@@ -315,29 +341,51 @@ void DecodeAndExecute(chip8* cpu)
 
         case OPCODE_REG_IS_VALUE:
         {
+            printf("REGISVAL %x %02x\n", OPCODE_X(cpu->opcode), OPCODE_NN(cpu->opcode));
             if (cpu->V[OPCODE_X(cpu->opcode)] == OPCODE_NN(cpu->opcode)) cpu->pc+=2;
         } break;
 
         case OPCODE_REG_IS_NOT_VALUE:
-            { if (cpu->V[OPCODE_X(cpu->opcode)] != OPCODE_NN(cpu->opcode)) cpu->pc+=2; } break;
+            {
+                printf("REGNOTVAL %x %02x\n", OPCODE_X(cpu->opcode), OPCODE_NN(cpu->opcode));
+                if (cpu->V[OPCODE_X(cpu->opcode)] != OPCODE_NN(cpu->opcode)) cpu->pc+=2;
+            } break;
 
         case OPCODE_REG_IS_REG:
-            { if (cpu->V[OPCODE_X(cpu->opcode)] == cpu->V[OPCODE_Y(cpu->opcode)]) cpu->pc+=2; } break;
+            {
+                printf("REGISREG %x %x\n", OPCODE_X(cpu->opcode), OPCODE_Y(cpu->opcode));
+                if (cpu->V[OPCODE_X(cpu->opcode)] == cpu->V[OPCODE_Y(cpu->opcode)]) cpu->pc+=2;
+            } break;
 
         case OPCODE_REG_IS_NOT_REG:
-            { if (cpu->V[OPCODE_X(cpu->opcode)] != cpu->V[OPCODE_Y(cpu->opcode)]) cpu->pc+=2; } break;
+            {
+                printf("REGNOTREG %x %x\n", OPCODE_X(cpu->opcode), OPCODE_Y(cpu->opcode));
+                if (cpu->V[OPCODE_X(cpu->opcode)] != cpu->V[OPCODE_Y(cpu->opcode)]) cpu->pc+=2;
+            } break;
 
         case OPCODE_SET_REG:
-            { cpu->V[OPCODE_X(cpu->opcode)] = OPCODE_NN(cpu->opcode); /* Bitshift to get value between 0 and F */ } break;
+            {
+                printf("SETREG %x %02x\n", OPCODE_X(cpu->opcode), OPCODE_NN(cpu->opcode));
+                cpu->V[OPCODE_X(cpu->opcode)] = OPCODE_NN(cpu->opcode); // Bitshift to get value between 0 and F 
+                } break;
 
         case OPCODE_ADD_TO_REG:
-            { cpu->V[OPCODE_X(cpu->opcode)] += OPCODE_NN(cpu->opcode); } break;
+            {
+                printf("REGADDVAL %x %02x\n", OPCODE_X(cpu->opcode), OPCODE_NN(cpu->opcode));
+                cpu->V[OPCODE_X(cpu->opcode)] += OPCODE_NN(cpu->opcode);
+            } break;
 
         case OPCODE_SET_INDEX_REG:
-             { cpu->I = OPCODE_NNN(cpu->opcode); } break;
+            {
+                printf("ISET %03x\n", OPCODE_NN(cpu->opcode));
+                cpu->I = OPCODE_NNN(cpu->opcode);
+            } break;
 
         case OPCODE_JUMP_OFFSET:
-            { cpu->pc = OPCODE_NNN(cpu->opcode) + cpu->V[0]; } break;
+            {
+                printf("JUMPOFFSET %03x\n", OPCODE_NNN(cpu->opcode));
+                cpu->pc = OPCODE_NNN(cpu->opcode) + cpu->V[0];
+            } break;
 
         case OPCODE_F:
         {
@@ -345,16 +393,19 @@ void DecodeAndExecute(chip8* cpu)
             {
                 case OPCODE_STORE_MEMORY:
                 {
+                    printf("MEMSTORE %x\n", OPCODE_X(cpu->opcode));
                     for (int i=0; i<=OPCODE_X(cpu->opcode); i++) cpu->memory[cpu->I + i] = cpu->V[i];
                 } break;
 
                 case OPCODE_LOAD_MEMORY:
                 {
+                    printf("MEMLOAD %x\n", OPCODE_X(cpu->opcode));
                     for (int i=0; i<=OPCODE_X(cpu->opcode); i++) cpu->V[i] = cpu->memory[cpu->I + i];
                 } break;
 
                 case OPCODE_CONVERT_DECIMAL:
                 {
+                    printf("CONVERTDEC %x\n", OPCODE_X(cpu->opcode));
                     cpu->memory[cpu->I] = cpu->V[OPCODE_X(cpu->opcode)] / 100;
                     cpu->memory[cpu->I+1] = (cpu->V[OPCODE_X(cpu->opcode)] / 10) %10;
                     cpu->memory[cpu->I+2] = cpu->V[OPCODE_X(cpu->opcode)] % 10;
@@ -362,27 +413,31 @@ void DecodeAndExecute(chip8* cpu)
 
                 case OPCODE_ADD_TO_INDEX:
                 {
+                    printf("IADD %x\n", OPCODE_X(cpu->opcode));
                     cpu->I += cpu->V[OPCODE_X(cpu->opcode)];
                 } break;
 
                 case OPCODE_GET_DELAY_TIMER:
                 {
+                    printf("GETDELAY %x\n", OPCODE_X(cpu->opcode));
                     cpu->V[OPCODE_X(cpu->opcode)] = cpu->delayTimer;
                 } break;
 
                 case OPCODE_SET_DELAY_TIMER:
                 {
+                    printf("SETDELAY %x\n", OPCODE_X(cpu->opcode));
                     cpu->delayTimer = cpu->V[OPCODE_X(cpu->opcode)];
                 } break;
 
                 case OPCODE_SET_SOUND_TIMER:
                 {
+                    printf("SETSOUND %x\n", OPCODE_X(cpu->opcode));
                     cpu->soundTimer = cpu->V[OPCODE_X(cpu->opcode)];
                 } break;
 
                 case OPCODE_AWAIT_KEY:
                 {
-                    printf("a");
+                    printf("AWAITKEY\n");
                     for (int i=0; i<16; i++)
                     {
                         if (cpu->keys[SDL_inputs[i]])
@@ -408,15 +463,22 @@ void DecodeAndExecute(chip8* cpu)
             switch (OPCODE_NN(cpu->opcode))
             {
                 case OPCODE_SKIP_IF_KEY:
-                    { if (cpu->keys[SDL_inputs[OPCODE_X(cpu->opcode)]]) cpu->pc++; } break;
+                    {
+                        printf("KEYIF %x\n", OPCODE_X(cpu->opcode));
+                        if (cpu->keys[SDL_inputs[cpu->V[OPCODE_X(cpu->opcode)]]]) cpu->pc+=2;
+                    } break;
 
                 case OPCODE_SKIP_IF_NOT_KEY:
-                    { if (!(cpu->keys[SDL_inputs[OPCODE_X(cpu->opcode)]])) cpu->pc++; } break;
+                    {
+                        printf("KEYNOT %x\n", OPCODE_X(cpu->opcode));
+                        if (!(cpu->keys[SDL_inputs[cpu->V[OPCODE_X(cpu->opcode)]]])) cpu->pc+=2;
+                    } break;
             } 
         } break;
 
         case OPCODE_DISPLAY:
         {
+            printf("DISPLAY\n");
             cpu->V[0xF] = 0;
             uint8_t x = cpu->V[OPCODE_X(cpu->opcode)] % SCREEN_WIDTH;
             uint8_t y = cpu->V[OPCODE_Y(cpu->opcode)] % SCREEN_HEIGHT;
@@ -454,7 +516,8 @@ void EmulateCycle(chip8* cpu)
 
     // Fetch instruction
     cpu->opcode = cpu->memory[cpu->pc] << 8 | cpu->memory[cpu->pc+1]; // Combine the two bytes to create the opcode
-    printf("[0x%08x]: %04x\n", cpu->pc, cpu->opcode);
+    //printf("[0x%08x]: %04x\n", cpu->pc, cpu->opcode);
+    printf("[0x%08x] %04x | ", cpu->pc, cpu->opcode);
     cpu->pc+=2; // increment program counter by 2
 
     DecodeAndExecute(cpu);
@@ -501,9 +564,11 @@ int main( int argc, char* args[] )
         {
             // Update input
             SDL_PumpEvents();
-            cpu.keys = (char*)SDL_GetKeyboardState(NULL); // Casting to char* because SDL sucks and returns a const char? Not good practice
+            cpu.keys = (char*)SDL_GetKeyboardState(NULL); // Casting to char* because SDL sucks and returns a const char? Not good practice btw
 
             EmulateCycle(&cpu);
+
+            if (cpu.halted) break;
         }
     
         UpdateWindowDisplay(&cpu);
