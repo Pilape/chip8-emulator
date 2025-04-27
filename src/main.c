@@ -193,6 +193,7 @@ void DecodeAndExecute(chip8* cpu)
                     printf("Clear screen\n");
                     // We clear the screen this way because it is a 2D array
                     for (int x=0; x<SCREEN_WIDTH; x++) { memset(cpu->display[x], 0, SCREEN_HEIGHT); }
+                    UpdateWindowDisplay(cpu);
                 } break;
 
                 case OPCODE_RETURN_SUBROUTINE:
@@ -228,18 +229,21 @@ void DecodeAndExecute(chip8* cpu)
                 {
                     printf("OR %x %x\n", OPCODE_X(cpu->opcode), OPCODE_Y(cpu->opcode));
                     cpu->V[OPCODE_X(cpu->opcode)] |= cpu->V[OPCODE_Y(cpu->opcode)];
+                    cpu->V[0xF] = 0;
                 } break;
 
                 case OPCODE_BINARY_AND:
                 {
                     printf("AND %x %x\n", OPCODE_X(cpu->opcode), OPCODE_Y(cpu->opcode));
                     cpu->V[OPCODE_X(cpu->opcode)] &= cpu->V[OPCODE_Y(cpu->opcode)];
+                    cpu->V[0xF] = 0;
                 } break;
 
                 case OPCODE_LOGICAL_XOR:
                 {
                     printf("XOR %x %x\n", OPCODE_X(cpu->opcode), OPCODE_Y(cpu->opcode));
                     cpu->V[OPCODE_X(cpu->opcode)] ^= cpu->V[OPCODE_Y(cpu->opcode)];
+                    cpu->V[0xF] = 0;
                 } break;
 
                 case OPCODE_ADD:
@@ -465,13 +469,13 @@ void DecodeAndExecute(chip8* cpu)
                 case OPCODE_SKIP_IF_KEY:
                     {
                         printf("KEYIF %x\n", OPCODE_X(cpu->opcode));
-                        if (cpu->keys[SDL_inputs[cpu->V[OPCODE_X(cpu->opcode)]]]) cpu->pc+=2;
+                        if (cpu->keys[SDL_inputs[cpu->V[OPCODE_X(cpu->opcode)]-1]]) cpu->pc+=2;
                     } break;
 
                 case OPCODE_SKIP_IF_NOT_KEY:
                     {
                         printf("KEYNOT %x\n", OPCODE_X(cpu->opcode));
-                        if (!(cpu->keys[SDL_inputs[cpu->V[OPCODE_X(cpu->opcode)]]])) cpu->pc+=2;
+                        if (!(cpu->keys[SDL_inputs[cpu->V[OPCODE_X(cpu->opcode)]-1]])) cpu->pc+=2;
                     } break;
             } 
         } break;
@@ -495,6 +499,9 @@ void DecodeAndExecute(chip8* cpu)
                     if ((spriteRow << i) & 0b10000000) cpu->display[x+i][y+j] = !cpu->display[x+i][y+j];
                 }
             }
+
+
+            UpdateWindowDisplay(cpu);
         } break;
 
         default:
@@ -560,18 +567,11 @@ int main( int argc, char* args[] )
         }
 
         // Update multiple times a frame to speed up program
-        for (int i=0; i<5; i++)
-        {
             // Update input
             SDL_PumpEvents();
             cpu.keys = (char*)SDL_GetKeyboardState(NULL); // Casting to char* because SDL sucks and returns a const char? Not good practice btw
-
             EmulateCycle(&cpu);
-
-            if (cpu.halted) break;
-        }
     
-        UpdateWindowDisplay(&cpu);
     }
 
     CloseWindow();
