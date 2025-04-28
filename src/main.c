@@ -108,7 +108,12 @@ chip8 InitProgram(char* path)
 
     // Load ROM
     FILE* romFile = fopen(path, "rb"); // Read in binary mode
-   
+    if (romFile == NULL)
+    {
+        printf("Failed to open file: '%s'\n", path);
+        exit(-1);
+    }
+
     // Get ROM size
     fseek(romFile, 0, SEEK_END);
     uint64_t fileSize = ftell(romFile);
@@ -398,13 +403,13 @@ void DecodeAndExecute(chip8* cpu)
                 case OPCODE_STORE_MEMORY:
                 {
                     printf("MEMSTORE %x\n", OPCODE_X(cpu->opcode));
-                    for (int i=0; i<=OPCODE_X(cpu->opcode); i++) cpu->memory[cpu->I + i] = cpu->V[i];
+                    for (int i=0; i<=OPCODE_X(cpu->opcode); i++) cpu->memory[cpu->I++] = cpu->V[i];
                 } break;
 
                 case OPCODE_LOAD_MEMORY:
                 {
                     printf("MEMLOAD %x\n", OPCODE_X(cpu->opcode));
-                    for (int i=0; i<=OPCODE_X(cpu->opcode); i++) cpu->V[i] = cpu->memory[cpu->I + i];
+                    for (int i=0; i<=OPCODE_X(cpu->opcode); i++) cpu->V[i] = cpu->memory[cpu->I++];
                 } break;
 
                 case OPCODE_CONVERT_DECIMAL:
@@ -500,7 +505,6 @@ void DecodeAndExecute(chip8* cpu)
                 }
             }
 
-
             UpdateWindowDisplay(cpu);
         } break;
 
@@ -566,11 +570,10 @@ int main( int argc, char* args[] )
             if(e.type==SDL_QUIT) cpu.halted = 1; 
         }
 
-        // Update multiple times a frame to speed up program
-            // Update input
-            SDL_PumpEvents();
-            cpu.keys = (char*)SDL_GetKeyboardState(NULL); // Casting to char* because SDL sucks and returns a const char? Not good practice btw
-            EmulateCycle(&cpu);
+        // Update input
+        SDL_PumpEvents();
+        cpu.keys = (char*)SDL_GetKeyboardState(NULL); // Casting to char* because SDL sucks and returns a const char? Not good practice btw
+        EmulateCycle(&cpu);
     
     }
 
