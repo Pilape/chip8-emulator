@@ -86,10 +86,10 @@ uint8_t fontSet[80] = {
 
 // Keys
 SDL_Scancode SDL_inputs[16] = {
-    SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3, SDL_SCANCODE_4,
-    SDL_SCANCODE_Q, SDL_SCANCODE_W, SDL_SCANCODE_E, SDL_SCANCODE_R,
-    SDL_SCANCODE_A, SDL_SCANCODE_S, SDL_SCANCODE_D, SDL_SCANCODE_F,
-    SDL_SCANCODE_Z, SDL_SCANCODE_X, SDL_SCANCODE_C, SDL_SCANCODE_V,
+    SDL_SCANCODE_X, SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3, SDL_SCANCODE_Q,
+    SDL_SCANCODE_W, SDL_SCANCODE_E, SDL_SCANCODE_A, SDL_SCANCODE_S, SDL_SCANCODE_D,
+    SDL_SCANCODE_Z, SDL_SCANCODE_C,
+    SDL_SCANCODE_4, SDL_SCANCODE_R, SDL_SCANCODE_F, SDL_SCANCODE_V,
 };
 
 chip8 InitProgram(char* path)
@@ -178,6 +178,7 @@ chip8 InitProgram(char* path)
     #define OPCODE_SET_DELAY_TIMER 0x15 // Sets delayTimer to VX
     #define OPCODE_SET_SOUND_TIMER 0x18 // Sets soundTimer to VX
     #define OPCODE_AWAIT_KEY 0x0A // Traps program in loop until key pressed
+    #define OPCODE_FONT_CHARACTER 0x29 // Sets I to specified character
 
 #define OPCODE_X(opcode) ((opcode & 0x0F00) >> 8)
 #define OPCODE_Y(opcode) ((opcode & 0x00F0) >> 4)
@@ -459,6 +460,14 @@ void DecodeAndExecute(chip8* cpu)
                     cpu->pc-=2;
                 } break;
 
+                case OPCODE_FONT_CHARACTER:
+                {
+                    printf("GETCHAR %x\n", OPCODE_X(cpu->opcode));
+                    uint8_t character = cpu->V[OPCODE_X(cpu->opcode)] & 0x0F; // Only use the last nibble
+                    cpu->I = character * 5;
+                    
+                } break;
+
                 default:
                 {
                     printf("[ERROR]: Invalid opcode: '%04x'\n", cpu->opcode);
@@ -474,13 +483,13 @@ void DecodeAndExecute(chip8* cpu)
                 case OPCODE_SKIP_IF_KEY:
                     {
                         printf("KEYIF %x\n", OPCODE_X(cpu->opcode));
-                        if (cpu->keys[SDL_inputs[cpu->V[OPCODE_X(cpu->opcode)]-1]]) cpu->pc+=2;
+                        if (cpu->keys[SDL_inputs[cpu->V[OPCODE_X(cpu->opcode)]]]) cpu->pc+=2;
                     } break;
 
                 case OPCODE_SKIP_IF_NOT_KEY:
                     {
                         printf("KEYNOT %x\n", OPCODE_X(cpu->opcode));
-                        if (!(cpu->keys[SDL_inputs[cpu->V[OPCODE_X(cpu->opcode)]-1]])) cpu->pc+=2;
+                        if (!(cpu->keys[SDL_inputs[cpu->V[OPCODE_X(cpu->opcode)]]])) cpu->pc+=2;
                     } break;
             } 
         } break;
