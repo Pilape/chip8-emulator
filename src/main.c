@@ -46,6 +46,7 @@ typedef struct {
 
     uint8_t halted;
 
+    uint8_t drawFlag;
 } chip8;
 
 void UpdateWindowDisplay(chip8* cpu)
@@ -199,7 +200,6 @@ void DecodeAndExecute(chip8* cpu)
                     printf("Clear screen\n");
                     // We clear the screen this way because it is a 2D array
                     for (int x=0; x<SCREEN_WIDTH; x++) { memset(cpu->display[x], 0, SCREEN_HEIGHT); }
-                    UpdateWindowDisplay(cpu);
                 } break;
 
                 case OPCODE_RETURN_SUBROUTINE:
@@ -513,8 +513,7 @@ void DecodeAndExecute(chip8* cpu)
                     if ((spriteRow << i) & 0b10000000) cpu->display[x+i][y+j] = !cpu->display[x+i][y+j];
                 }
             }
-
-            UpdateWindowDisplay(cpu);
+            cpu->drawFlag = 1;
         } break;
 
         default:
@@ -527,13 +526,6 @@ void DecodeAndExecute(chip8* cpu)
 
 void EmulateCycle(chip8* cpu)
 {
-    if (cpu->delayTimer>0) cpu->delayTimer--;
-    if (cpu->soundTimer>0)
-    {
-        printf("BEEP!\n");
-        cpu->delayTimer--;
-    }
-
     // Fetch instruction
     cpu->opcode = cpu->memory[cpu->pc] << 8 | cpu->memory[cpu->pc+1]; // Combine the two bytes to create the opcode
     //printf("[0x%08x]: %04x\n", cpu->pc, cpu->opcode);
@@ -542,6 +534,9 @@ void EmulateCycle(chip8* cpu)
 
     DecodeAndExecute(cpu);
 }
+
+#define CLOCK_HZ 10000//500
+#define TIMER_HZ 60
 
 int main( int argc, char* args[] )
 {
@@ -572,6 +567,8 @@ int main( int argc, char* args[] )
     SDL_Event e;
     cpu.halted = 0;
 
+    uint32_t lastTime = SDL_GetTicks();
+    uint32_t timerLast = SDL_GetTicks();
     while (!cpu.halted)
     {
         while(SDL_PollEvent(&e))
@@ -582,8 +579,34 @@ int main( int argc, char* args[] )
         // Update input
         SDL_PumpEvents();
         cpu.keys = (char*)SDL_GetKeyboardState(NULL); // Casting to char* because SDL sucks and returns a const char? Not good practice btw
-        EmulateCycle(&cpu);
-    
+        
+        uint32_t currentTime = SDL_GetTicks();
+        // Run ~500 opcodes per second
+        if (currentTime - lastTime >= (100 / CLOCK_HZ))
+        {
+            EmulateCycle(&cpu);
+            lastTime = currentTime;
+        }
+   
+        // Update timer at 60Hz
+        if (currentTime - timerLast >= (1000 / TIMER_HZ))
+        {
+            if (cpu.delayTimer>0) cpu.delayTimer--;
+            if (cpu.soundTimer>0)
+            {
+                printf("BEEP!\n");
+                cpu.delayTimer--;
+            }
+            timerLast = currentTime;
+        }
+
+        if (cpu.drawFlag)
+        {
+            UpdateWindowDisplay(&cpu);
+            cpu.drawFlag = 0;
+        }
+
+        SDL_Delay(1);
     }
 
     CloseWindow();
