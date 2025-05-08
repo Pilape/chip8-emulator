@@ -6,6 +6,10 @@
 #include <stdlib.h>
 #include <math.h>
 
+typedef uint8_t bool;
+#define false 0
+#define true 1
+
 #define SCREEN_WIDTH 64
 #define SCREEN_HEIGHT 32
 #define SCALE 16
@@ -187,6 +191,12 @@ chip8 InitProgram(char* path)
 #define OPCODE_NN(opcode) (opcode & 0x00FF)
 #define OPCODE_N(opcode) (opcode & 0x000F)
 
+// Quirks
+const bool vfReset = false; // Reset VF when running AND, OR and XOR opcodes
+const bool memoryIncr = false; // Increments I when writing or loading memory
+const bool shiftSwap = false; // Uses Y when doing a bitshift
+const bool jumpX = false; // When jumping with offset use XNN instead of NNN
+
 // We do both at the same time because it is simpler, atleast for the CHIP-8
 void DecodeAndExecute(chip8* cpu)
 {
@@ -235,21 +245,21 @@ void DecodeAndExecute(chip8* cpu)
                 {
                     printf("OR %x %x\n", OPCODE_X(cpu->opcode), OPCODE_Y(cpu->opcode));
                     cpu->V[OPCODE_X(cpu->opcode)] |= cpu->V[OPCODE_Y(cpu->opcode)];
-                    cpu->V[0xF] = 0;
+                    if (vfReset) cpu->V[0xF] = 0;
                 } break;
 
                 case OPCODE_BINARY_AND:
                 {
                     printf("AND %x %x\n", OPCODE_X(cpu->opcode), OPCODE_Y(cpu->opcode));
                     cpu->V[OPCODE_X(cpu->opcode)] &= cpu->V[OPCODE_Y(cpu->opcode)];
-                    cpu->V[0xF] = 0;
+                    if (vfReset) cpu->V[0xF] = 0;
                 } break;
 
                 case OPCODE_LOGICAL_XOR:
                 {
                     printf("XOR %x %x\n", OPCODE_X(cpu->opcode), OPCODE_Y(cpu->opcode));
                     cpu->V[OPCODE_X(cpu->opcode)] ^= cpu->V[OPCODE_Y(cpu->opcode)];
-                    cpu->V[0xF] = 0;
+                    if (vfReset) cpu->V[0xF] = 0;
                 } break;
 
                 case OPCODE_ADD:
@@ -291,7 +301,7 @@ void DecodeAndExecute(chip8* cpu)
                 case OPCODE_SHIFT_RIGHT:
                 {
                     printf("SHIFTR %x %x\n", OPCODE_X(cpu->opcode), OPCODE_Y(cpu->opcode));
-                    cpu->V[OPCODE_X(cpu->opcode)] = cpu->V[OPCODE_Y(cpu->opcode)];
+                    if (shiftSwap) cpu->V[OPCODE_X(cpu->opcode)] = cpu->V[OPCODE_Y(cpu->opcode)];
                     uint8_t removedBit = cpu->V[OPCODE_X(cpu->opcode)] & 0b00000001;
 
                     cpu->V[OPCODE_X(cpu->opcode)] >>= 1;
@@ -303,7 +313,7 @@ void DecodeAndExecute(chip8* cpu)
                 case OPCODE_SHIFT_LEFT:
                 {
                     printf("SHIFTL %x %x\n", OPCODE_X(cpu->opcode), OPCODE_Y(cpu->opcode));
-                    cpu->V[OPCODE_X(cpu->opcode)] = cpu->V[OPCODE_Y(cpu->opcode)];
+                    if (shiftSwap) cpu->V[OPCODE_X(cpu->opcode)] = cpu->V[OPCODE_Y(cpu->opcode)];
                     uint8_t removedBit = (cpu->V[OPCODE_X(cpu->opcode)] & 0b10000000) >> 7;
 
                     cpu->V[OPCODE_X(cpu->opcode)] <<= 1;
@@ -329,7 +339,7 @@ void DecodeAndExecute(chip8* cpu)
         case OPCODE_RANDOM:
             {
                 printf("RNG %x %02x\n", OPCODE_X(cpu->opcode), OPCODE_NN(cpu->opcode));
-                cpu->V[OPCODE_X(cpu->opcode)] = (rand() % 255) & OPCODE_NN(cpu->opcode);
+                cpu->V[OPCODE_X(cpu->opcode)] = (rand() % 0xFF) & OPCODE_NN(cpu->opcode);
             } break;
 
         case OPCODE_CALL_SUBROUTINE:
@@ -342,6 +352,7 @@ void DecodeAndExecute(chip8* cpu)
             {
                 printf("[ERROR]: Stack overflow.\n");
                 cpu->halted = 1;
+                break;
             }
             cpu->stack[cpu->sp] = prevPos;
             cpu->sp++;
@@ -394,7 +405,14 @@ void DecodeAndExecute(chip8* cpu)
         case OPCODE_JUMP_OFFSET:
             {
                 printf("JUMPOFFSET %03x\n", OPCODE_NNN(cpu->opcode));
-                cpu->pc = OPCODE_NNN(cpu->opcode) + cpu->V[0];
+
+                if (jumpX)
+                {
+                    cpu->pc = OPCODE_NN(cpu->opcode) + cpu->V[OPCODE_X(cpu->opcode)];
+                }
+                else {
+                    cpu->pc = OPCODE_NNN(cpu->opcode) + cpu->V[0];
+                }
             } break;
 
         case OPCODE_F:
@@ -404,13 +422,21 @@ void DecodeAndExecute(chip8* cpu)
                 case OPCODE_STORE_MEMORY:
                 {
                     printf("MEMSTORE %x\n", OPCODE_X(cpu->opcode));
-                    for (int i=0; i<=OPCODE_X(cpu->opcode); i++) cpu->memory[cpu->I++] = cpu->V[i];
+                    for (int i=0; i<=OPCODE_X(cpu->opcode); i++)
+                    {
+                        uint16_t memoryPos = (memoryIncr) ? cpu->I++ : cpu->I+i;
+                        cpu->memory[memoryPos] = cpu->V[i];
+                    }
                 } break;
 
                 case OPCODE_LOAD_MEMORY:
                 {
                     printf("MEMLOAD %x\n", OPCODE_X(cpu->opcode));
-                    for (int i=0; i<=OPCODE_X(cpu->opcode); i++) cpu->V[i] = cpu->memory[cpu->I++];
+                    for (int i=0; i<=OPCODE_X(cpu->opcode); i++)
+                    {
+                        uint16_t memoryPos = (memoryIncr) ? cpu->I++ : cpu->I+i;
+                        cpu->V[i] = cpu->memory[memoryPos];
+                    }
                 } break;
 
                 case OPCODE_CONVERT_DECIMAL:
@@ -509,8 +535,8 @@ void DecodeAndExecute(chip8* cpu)
                 for (int i=0; i<8; i++)
                 {
                     if (x+i>=SCREEN_WIDTH) break;
-                    if (cpu->display[x+i][y+j]) cpu->V[0xF] = 1;
-                    if ((spriteRow << i) & 0b10000000) cpu->display[x+i][y+j] = !cpu->display[x+i][y+j];
+                    if (cpu->display[x+i][y+j] && ((spriteRow >> (7-i)) & 1) == 1) cpu->V[0xF] = 1;
+                    if ((spriteRow >> (7-i)) & 1) cpu->display[x+i][y+j] ^= 1; //!cpu->display[x+i][y+j];
                 }
             }
             cpu->drawFlag = 1;
@@ -519,7 +545,7 @@ void DecodeAndExecute(chip8* cpu)
         default:
         {
             printf("[ERROR]: Invalid opcode: '%04x'\n", cpu->opcode);
-            cpu->halted = 1;
+            cpu->halted = true;
         } break;
     }
 }
